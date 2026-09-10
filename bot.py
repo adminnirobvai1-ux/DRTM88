@@ -14,9 +14,9 @@ from datetime import datetime, timedelta, timezone
 BOT_TOKEN = "8864547814:AAGZY2Kc_252le4uaZhOL0AR3Ql4g3G3I7A"
 BOT_USERNAME = "DRX_TM_POD_BOT" 
 CHANNEL_USERNAME = "@DARK67HACK"
-CHAT_ID = "@DARK67HACK"  # সিগন্যাল পাঠানোর চ্যানেল/গ্রুপ
+CHAT_ID = "@DARK67HACK"  # সিগন্যাল পাঠানোর চ্যানেল
 
-ADMIN_ID = "8707571669"  # মূল এডমিন আইডি
+ADMIN_ID = "8707571669"  # এডমিন আইডি
 
 BASE_API = "https://sh-tim-faruk-vai.ai.studio/api"
 LEADERBOARD_API = "https://sh-tim-faruk-vai.ai.studio/apipid.json"
@@ -34,7 +34,7 @@ WIN_STICKERS = [
 LOSS_STICKER = "CAACAgUAAxkBAAICzGpgWC6gUjMbKd5TvjfoCeqHPrrtAAJOGQACxAuZVNxk4HDx8tskPQQ"
 MORNING_STICKER = "CAACAgUAAxkBAAIC0GpgWErTJk46Z_CfSizMZsi2vIU0AAKaFwACE0qZVBcum6ql5maTPQQ"
 
-# ================= ট্রেডার্স লিস্ট =================
+# ================= ট্রেডার তালিকা =================
 ALL_TRADERS = [
     {"name": "Subs Pro VIP", "slug": "subs"},
     {"name": "Dragon Pro VIP", "slug": "dragon-pro"},
@@ -73,7 +73,6 @@ ALL_TRADERS = [
 USER_SESSIONS = {}
 LAST_UPDATE_ID = 0
 
-# সিগন্যাল স্টেট
 IS_ACTIVE = False
 STOP_PENDING = False
 LAST_WAS_WIN = True
@@ -133,7 +132,7 @@ def save_db(db):
         with open(DB_FILE, "w") as f:
             json.dump(db, f)
     except Exception as e:
-        print(f"[-] DB Error: {e}")
+        print(f"[-] DB Save Error: {e}")
 
 USERS_DB = load_db()
 
@@ -143,10 +142,10 @@ def send_telegram_msg(chat_id, text, parse_mode="HTML"):
     try:
         res = requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, timeout=5).json()
         if not res.get("ok"):
-            print(f"[-] SendMsg Error to {chat_id}: {res.get('description')}")
+            print(f"[-] SendMsg Failed: {res.get('description')}")
         return res
     except Exception as e:
-        print(f"[-] Network Error in send_telegram_msg: {e}")
+        print(f"[-] SendMsg Network Error: {e}")
         return {}
 
 def send_telegram_sticker(chat_id, sticker_id):
@@ -159,7 +158,7 @@ def send_telegram_sticker(chat_id, sticker_id):
 def answer_callback(cb_id, text="", show_alert=False):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery"
     try:
-        requests.post(url, json={"callback_query_id": cb_id, "text": text, "show_alert": show_alert}, timeout=2)
+        requests.post(url, json={"callback_query_id": cb_id, "text": text, "show_alert": show_alert}, timeout=3)
     except:
         pass
 
@@ -167,15 +166,12 @@ def check_channel_member(user_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember"
     params = {"chat_id": CHANNEL_USERNAME, "user_id": user_id}
     try:
-        res = requests.get(url, params=params, timeout=4).json()
+        res = requests.get(url, params=params, timeout=3).json()
         if res.get("ok"):
             status = res["result"]["status"]
             return status in ["member", "administrator", "creator"]
-        else:
-            # বট যদি চ্যানেলে এডমিন না থাকে
-            print(f"[-] getChatMember Warning: {res.get('description')} (বটকে অবশ্যই চ্যানেলে এডমিন বানাতে হবে)")
-    except Exception as e:
-        print(f"[-] Network Error in check_channel_member: {e}")
+    except:
+        pass
     return False
 
 def get_user_task_info(user_id):
@@ -194,20 +190,20 @@ def get_user_task_info(user_id):
 # ================= API ডেটা ফেচার =================
 def fetch_leaderboard():
     try:
-        res = requests.get(LEADERBOARD_API, timeout=4)
+        res = requests.get(LEADERBOARD_API, timeout=3)
         if res.status_code == 200:
             return res.json()
-    except Exception:
+    except:
         pass
     return {}
 
 def fetch_trader_data(slug):
     url = f"{BASE_API}/apipid-{slug}.json"
     try:
-        res = requests.get(url, timeout=4)
+        res = requests.get(url, timeout=3)
         if res.status_code == 200:
             return res.json()
-    except Exception:
+    except:
         pass
     return {}
 
@@ -215,9 +211,9 @@ def fetch_latest_results():
     headers = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
     payload = {"pageNumber": 1, "pageSize": 10}
     try:
-        res = requests.post(LOTTERY_RESULT_API, json=payload, headers=headers, timeout=4)
+        res = requests.post(LOTTERY_RESULT_API, json=payload, headers=headers, timeout=3)
         if res.status_code != 200:
-            res = requests.get(LOTTERY_RESULT_API, headers=headers, timeout=4)
+            res = requests.get(LOTTERY_RESULT_API, headers=headers, timeout=3)
         data = res.json()
         
         def extract_list(d):
@@ -238,7 +234,7 @@ def fetch_latest_results():
                 if issue and num != -1:
                     parsed.append((issue, int(num)))
             return parsed
-    except Exception:
+    except:
         pass
     return []
 
@@ -251,7 +247,7 @@ def get_timer_display():
     bar = "▓" * blocks + "░" * (15 - blocks)
     return f"⏳ {sec:02d}S [{bar}]"
 
-# ================= 🧠 MINI HUMAN BRAIN TOP TRADER =================
+# ================= 🧠 TOP TRADER BRAIN =================
 def get_top_trader_prediction():
     lb = fetch_leaderboard()
     top_traders = lb.get("top_3_traders", [])
@@ -275,7 +271,6 @@ def get_top_trader_prediction():
         target_name = "Tiger Pro VIP"
                 
     t_data = fetch_trader_data(target_slug)
-    
     if not t_data:
         for backup_slug in ["tiger-pro", "dragon-pro", "subs"]:
             t_data = fetch_trader_data(backup_slug)
@@ -317,7 +312,7 @@ def send_prediction_signal(issue, prediction, trader_name, pred_num=None):
 ⚡ Digits   ➤  {digits}
 ▱▱▱▱▱▱▱▱▱▱▱▱▱▱"""
     send_telegram_msg(CHAT_ID, text)
-    print(f"[*] [Signal Sent] Issue {short_issue} | Pred: {prediction} | Trader: {trader_name}")
+    print(f"[*] Signal Sent: {short_issue} -> {prediction} ({trader_name})")
 
 # ================= সেশন কন্ট্রোল লজিক =================
 def start_signal_session(manual=False):
@@ -331,15 +326,15 @@ def start_signal_session(manual=False):
             CHAT_ID, 
             f"🚀 <b>VIP SIGNAL SESSION STARTED!</b>\n\n"
             f"🧠 <i>AI Top-Trader Brain Activated.</i>\n"
-            f"⏰ <b>Triggered By:</b> {trigger}\n"
-            f"🎯 <i>Best trader predictions broadcasting live!</i>"
+            f"⏰ <b>Trigger:</b> {trigger}\n"
+            f"🎯 <i>Live predictions started!</i>"
         )
-        print(f"[+] Channel Session Started via {trigger}")
+        print(f"[+] Channel Session Started ({trigger})")
 
 def trigger_stop_signal_session():
     global STOP_PENDING
     STOP_PENDING = True
-    print("[*] Graceful stop requested. Waiting for WIN before closing session...")
+    print("[*] Stop mode requested. Bot will close on next WIN.")
 
 def execute_session_close():
     global IS_ACTIVE, STOP_PENDING
@@ -349,10 +344,10 @@ def execute_session_close():
     send_telegram_msg(
         CHAT_ID,
         "🛑 <b>SESSION CLOSED SAFELY!</b>\n\n"
-        "✅ <i>Successfully finished with a WIN.</i>\n"
-        "ধন্যবাদ সবাইকে আমাদের সাথে থাকার জন্য। পরবর্তী শিডিউলে আবার দেখা হবে! 🌹"
+        "✅ <i>Successfully completed with a WIN.</i>\n"
+        "ধন্যবাদ সবাইকে। পরবর্তী সেশনে আবার দেখা হবে! 🌹"
     )
-    print("[-] Session Closed Safely on WIN.")
+    print("[-] Session Closed On WIN.")
 
 def is_in_schedule(now):
     current_minutes = now.hour * 60 + now.minute
@@ -363,7 +358,7 @@ def is_in_schedule(now):
             return True
     return False
 
-# ================= চ্যানেলের লাইভ সিগন্যাল ইঞ্জিন =================
+# ================= চ্যানেল সিগন্যাল ইঞ্জিন =================
 def channel_signal_engine():
     global IS_ACTIVE, STOP_PENDING, LAST_WAS_WIN, LAST_MORNING_STICKER_DATE
     
@@ -371,7 +366,7 @@ def channel_signal_engine():
     pending_prediction = None
     last_processed_issue = None
 
-    print("[*] Channel Signal Engine Running...")
+    print("[*] Signal Engine Running...")
 
     while True:
         try:
@@ -407,23 +402,21 @@ def channel_signal_engine():
                         if actual_is_big == predicted_is_big:
                             send_telegram_sticker(CHAT_ID, random.choice(WIN_STICKERS))
                             LAST_WAS_WIN = True
-                            print(f"[+] [WIN] Issue {target_predicted_issue} | Res: {target_num} | Pred: {pending_prediction}")
+                            print(f"[+] WIN | Issue {target_predicted_issue} | Result: {target_num}")
                             if STOP_PENDING:
                                 execute_session_close()
                         else:
                             send_telegram_sticker(CHAT_ID, LOSS_STICKER)
                             LAST_WAS_WIN = False
-                            print(f"[-] [LOSS] Issue {target_predicted_issue} | Res: {target_num} | Pred: {pending_prediction}")
+                            print(f"[-] LOSS | Issue {target_predicted_issue} | Result: {target_num}")
 
                         target_predicted_issue = None
                         pending_prediction = None
 
                 if IS_ACTIVE and target_predicted_issue is None:
                     next_issue = str(int(curr_issue) + 1)
-                    
                     if next_issue != last_processed_issue:
                         trader_name, slug, period, prediction, pred_num = get_top_trader_prediction()
-                        
                         if prediction:
                             final_issue = period if (period and len(period) >= 6) else next_issue
                             pending_prediction = prediction
@@ -432,11 +425,11 @@ def channel_signal_engine():
                             send_prediction_signal(final_issue, prediction, trader_name, pred_num)
 
         except Exception as e:
-            print(f"[-] Signal Engine Loop Error: {e}")
+            print(f"[-] Signal Engine Error: {e}")
 
         time.sleep(0.5)
 
-# ================= টার্মিনাল মেনু ও কীবোর্ড ভিউ =================
+# ================= মেনু ও কীবোর্ড ভিউ =================
 def send_welcome_task_menu(chat_id, msg_id=None):
     target, current, _, _ = get_user_task_info(chat_id)
     text = (
@@ -452,10 +445,10 @@ def send_welcome_task_menu(chat_id, msg_id=None):
     channel_link = f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}"
     personal_ref_link = f"https://t.me/{BOT_USERNAME}?start={chat_id}"
     
-    # URL এনকোডিং ফিক্স (BUTTON_URL_INVALID সমাধান)
+    # ইউআরএল নিরাপদ এনকোডিং
     encoded_ref = urllib.parse.quote(personal_ref_link)
-    encoded_text = urllib.parse.quote("Join Premium WinGo Prediction Terminal")
-    share_url = f"https://t.me/share/url?url={encoded_ref}&text={encoded_text}"
+    encoded_txt = urllib.parse.quote("Join Premium WinGo Prediction Terminal")
+    share_url = f"https://t.me/share/url?url={encoded_ref}&text={encoded_txt}"
 
     keyboard = [
         [{"text": to_premium("JOIN CHANNEL"), "url": channel_link}],
@@ -475,11 +468,11 @@ def send_welcome_task_menu(chat_id, msg_id=None):
         if res.get("ok"):
             save_msg_id = msg_id if msg_id else res["result"]["message_id"]
             USER_SESSIONS[str(chat_id)] = {"msg_id": save_msg_id, "view": "task", "slug": None}
-            print(f"[+] Task Menu sent successfully to chat_id: {chat_id}")
+            print(f"[+] Task Menu Delivered to: {chat_id}")
         else:
-            print(f"[-] Send Task Menu Error: {res}")
+            print(f"[-] Task Menu Error: {res}")
     except Exception as e:
-        print(f"[-] send_welcome_task_menu Exception: {e}")
+        print(f"[-] send_welcome_task_menu Ex: {e}")
 
 def build_menu_markup():
     leaderboard = fetch_leaderboard()
@@ -557,11 +550,11 @@ def send_main_menu(chat_id, msg_id=None):
         if res.get("ok"):
             save_msg_id = msg_id if msg_id else res["result"]["message_id"]
             USER_SESSIONS[str(chat_id)] = {"msg_id": save_msg_id, "view": "menu", "slug": None}
-            print(f"[+] Main Menu sent successfully to chat_id: {chat_id}")
+            print(f"[+] Main Menu Delivered to: {chat_id}")
         else:
-            print(f"[-] Send Main Menu Error: {res}")
+            print(f"[-] Main Menu Error: {res}")
     except Exception as e:
-        print(f"[-] send_main_menu Exception: {e}")
+        print(f"[-] send_main_menu Ex: {e}")
 
 def switch_view(chat_id, msg_id, view, slug=None):
     if view == "menu":
@@ -575,7 +568,7 @@ def switch_view(chat_id, msg_id, view, slug=None):
     try:
         requests.post(url, json=payload, timeout=4)
         USER_SESSIONS[str(chat_id)] = {"msg_id": msg_id, "view": view, "slug": slug}
-    except Exception:
+    except:
         pass
 
 def live_update_keyboard(chat_id, msg_id, view, slug):
@@ -588,7 +581,7 @@ def live_update_keyboard(chat_id, msg_id, view, slug):
     payload = {"chat_id": chat_id, "message_id": msg_id, "reply_markup": {"inline_keyboard": markup}}
     try:
         requests.post(url, json=payload, timeout=3)
-    except Exception:
+    except:
         pass
 
 def realtime_sync_engine():
@@ -597,23 +590,156 @@ def realtime_sync_engine():
             for chat_id, session in list(USER_SESSIONS.items()):
                 if session.get("view") in ["menu", "market"]:
                     live_update_keyboard(chat_id, session["msg_id"], session["view"], session.get("slug"))
-        except Exception:
+        except:
             pass
-        time.sleep(2)  # টেলিগ্রাম রেট লিমিট সুরক্ষিত রাখতে ২ সেকেন্ড ব্যবধান
+        time.sleep(2)
+
+# ================= মেসেজ প্রসেসর (Fast Response) =================
+def process_single_update(item):
+    global SCHEDULES
+    
+    # ১. মেসেজ হ্যান্ডলার
+    msg = item.get("message") or item.get("channel_post")
+    if msg and "text" in msg:
+        sender_id = str(msg.get("from", {}).get("id", ""))
+        chat_id = str(msg["chat"]["id"])
+        msg_text = msg["text"].strip()
+        cmd_upper = msg_text.upper()
+        print(f"[*] User [{chat_id}] sent: {msg_text}")
+
+        # এডমিন কমান্ড
+        if sender_id == ADMIN_ID or chat_id == ADMIN_ID:
+            if cmd_upper == "/TA":
+                start_signal_session(manual=True)
+                send_telegram_msg(chat_id, "✅ লাইভ সিগন্যাল সেশন সাথে সাথে শুরু করা হয়েছে!")
+                return
+            elif cmd_upper == "/TOFF":
+                trigger_stop_signal_session()
+                send_telegram_msg(chat_id, "⏳ সেশন স্টপ মোডে গেছে। পরবর্তী WIN হওয়ার পর নিরাপদভাবে অফ হবে।")
+                return
+            elif cmd_upper.startswith("/TM"):
+                new_sched = parse_time_command(msg_text)
+                if new_sched:
+                    SCHEDULES = [new_sched]
+                    sh, sm, eh, em = new_sched
+                    txt = f"✅ নতুন সিগন্যাল টাইম সেট করা হয়েছে:\n🕒 {format_12hr(sh, sm)} থেকে {format_12hr(eh, em)} (BD Time)"
+                    send_telegram_msg(CHAT_ID, txt)
+                    send_telegram_msg(chat_id, "✅ শিডিউল আপডেট সফল হয়েছে।")
+                return
+            elif msg_text.startswith("/admin "):
+                new_pass = msg_text.split(" ", 1)[1].strip()
+                USERS_DB["__config__"]["bypass_password"] = new_pass
+                save_db(USERS_DB)
+                send_telegram_msg(chat_id, f"✅ <b>Bypass password set to:</b> {new_pass}")
+                return
+
+        # ইউজার পাসওয়ার্ড বাইপাস
+        global_pass = USERS_DB.get("__config__", {}).get("bypass_password")
+        if global_pass and msg_text == global_pass:
+            _, _, _, current_day = get_user_task_info(chat_id)
+            if "unlocked_days" not in USERS_DB[chat_id]:
+                USERS_DB[chat_id]["unlocked_days"] = []
+            if str(current_day) not in USERS_DB[chat_id]["unlocked_days"]:
+                USERS_DB[chat_id]["unlocked_days"].append(str(current_day))
+                save_db(USERS_DB)
+            send_telegram_msg(chat_id, "✅ <b>𝐏𝐀𝐒𝐒𝐖𝐎𝐑𝐃 𝐀𝐂𝐂𝐄𝐏𝐓𝐄𝐃!</b>\nআপনি আজকের জন্য রেফারাল ছাড়াই ভিআইপি বট আনলক করেছেন।")
+            send_main_menu(chat_id)
+            return
+
+        # রেফারাল ট্র্যাকিং
+        if msg_text.startswith("/start ") and len(msg_text.split()) > 1:
+            referrer_id = msg_text.split()[1].strip()
+            if chat_id not in USERS_DB:
+                get_user_task_info(chat_id)
+                if referrer_id in USERS_DB and referrer_id != chat_id:
+                    if "referrals" not in USERS_DB[referrer_id]:
+                        USERS_DB[referrer_id]["referrals"] = []
+                    if chat_id not in USERS_DB[referrer_id]["referrals"]:
+                        USERS_DB[referrer_id]["referrals"].append(chat_id)
+                        save_db(USERS_DB)
+
+        # সাধারণ ইউজার মেসেজ/স্টার্ট
+        is_member = check_channel_member(chat_id)
+        target, current_refs, is_unlocked, _ = get_user_task_info(chat_id)
+        if is_unlocked and is_member:
+            send_main_menu(chat_id)
+        else:
+            send_welcome_task_menu(chat_id)
+
+    # ২. বাটন কলব্যাক হ্যান্ডলার
+    elif "callback_query" in item:
+        cb = item["callback_query"]
+        cb_id = cb["id"]
+        data = cb.get("data", "")
+        chat_id = str(cb["message"]["chat"]["id"])
+        msg_id = cb["message"]["message_id"]
+
+        if data == "verify_task":
+            is_member = check_channel_member(chat_id)
+            target, _, is_unlocked, current_day = get_user_task_info(chat_id)
+            if not is_member:
+                answer_callback(cb_id, "Access Denied: You must join the channel first.", show_alert=True)
+            else:
+                raw_referrals = USERS_DB[chat_id].get("referrals", [])
+                valid_referrals = 0
+                fake_referrals = 0
+                for ref_id in raw_referrals:
+                    if check_channel_member(ref_id):
+                        valid_referrals += 1
+                    else:
+                        fake_referrals += 1
+
+                if valid_referrals < target:
+                    rem = target - valid_referrals
+                    alert_text = f"Access Denied: {rem} more REAL users must JOIN the channel."
+                    if fake_referrals > 0:
+                        alert_text += f"\n\n⚠️ Detected {fake_referrals} fake referrals!"
+                    answer_callback(cb_id, alert_text, show_alert=True)
+                    send_welcome_task_menu(chat_id, msg_id)
+                else:
+                    if not is_unlocked:
+                        if "unlocked_days" not in USERS_DB[chat_id]:
+                            USERS_DB[chat_id]["unlocked_days"] = []
+                        USERS_DB[chat_id]["unlocked_days"].append(str(current_day))
+                        save_db(USERS_DB)
+                    answer_callback(cb_id, "Access Granted. Real Referrals Verified! ✅", show_alert=False)
+                    send_main_menu(chat_id, msg_id)
+
+        elif data.startswith("open_"):
+            selected_slug = data.replace("open_", "")
+            switch_view(chat_id, msg_id, "market", selected_slug)
+            answer_callback(cb_id)
+
+        elif data == "back_to_menu":
+            switch_view(chat_id, msg_id, "menu", None)
+            answer_callback(cb_id)
+
+        else:
+            answer_callback(cb_id)
 
 # ================= সেন্ট্রাল টেলিগ্রাম লিসেনার =================
 def telegram_listener():
-    global LAST_UPDATE_ID, SCHEDULES
+    global LAST_UPDATE_ID, BOT_USERNAME
     
-    # পূর্বের কোনো আটকানো ওয়েবহুক ও পেন্ডিং মেসেজ পরিষ্কার করা
-    print("[*] Clearing old webhook conflicts...")
+    # বট টোকেন যাচাই ও স্বয়ংক্রিয় ইউজারনেম রিট্রিভ
     try:
-        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=5)
-        print("[+] Webhook cleared. Polling mode activated!")
+        me = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=5).json()
+        if not me.get("ok"):
+            print(f"❌ [CRITICAL ERROR] টোকেন ভুল বা ইনভ্যালিড! টেলিগ্রাম থেকে 401 Unauthorized এসেছে!")
+            return
+        BOT_USERNAME = me["result"]["username"]
+        print(f"✅ Bot connected successfully: @{BOT_USERNAME}")
     except Exception as e:
-        print(f"[-] Webhook clear failed: {e}")
+        print(f"[-] Bot connection check failed: {e}")
 
-    print("[*] Telegram Listener Active. Ready for Commands.")
+    # পেন্ডিং বা আটকে থাকা কোনো পুরনো রিকোয়েস্ট ক্লিয়ার করা
+    try:
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=4)
+        print("[+] Webhook and old queues cleared!")
+    except:
+        pass
+
+    print("[*] Telegram Listener Active & Ready.")
 
     while True:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
@@ -623,130 +749,14 @@ def telegram_listener():
             if res.get("ok"):
                 for item in res["result"]:
                     LAST_UPDATE_ID = item["update_id"]
-
-                    msg = item.get("message") or item.get("channel_post")
-                    if msg and "text" in msg:
-                        sender_id = str(msg.get("from", {}).get("id", ""))
-                        chat_id = str(msg["chat"]["id"])
-                        msg_text = msg["text"].strip()
-                        cmd_upper = msg_text.upper()
-                        print(f"[*] Incoming Message from {chat_id}: '{msg_text}'")
-
-                        # এডমিন কমান্ডসমূহ
-                        if sender_id == ADMIN_ID or chat_id == ADMIN_ID:
-                            if cmd_upper == "/TA":
-                                start_signal_session(manual=True)
-                                send_telegram_msg(chat_id, "✅ লাইভ সিগন্যাল সেশন সাথে সাথে শুরু করা হয়েছে!")
-                                continue
-                            elif cmd_upper == "/TOFF":
-                                trigger_stop_signal_session()
-                                send_telegram_msg(chat_id, "⏳ সেশন স্টপ মোডে গেছে। পরবর্তী WIN হওয়ার পর নিরাপদভাবে অফ হবে।")
-                                continue
-                            elif cmd_upper.startswith("/TM"):
-                                new_sched = parse_time_command(msg_text)
-                                if new_sched:
-                                    SCHEDULES = [new_sched]
-                                    sh, sm, eh, em = new_sched
-                                    txt = f"✅ নতুন সিগন্যাল টাইম সেট করা হয়েছে:\n🕒 {format_12hr(sh, sm)} থেকে {format_12hr(eh, em)} (BD Time)"
-                                    send_telegram_msg(CHAT_ID, txt)
-                                    send_telegram_msg(chat_id, "✅ শিডিউল আপডেট সফল হয়েছে।")
-                                continue
-                            elif msg_text.startswith("/admin "):
-                                new_pass = msg_text.split(" ", 1)[1].strip()
-                                USERS_DB["__config__"]["bypass_password"] = new_pass
-                                save_db(USERS_DB)
-                                send_telegram_msg(chat_id, f"✅ <b>Bypass password set to:</b> {new_pass}")
-                                continue
-
-                        # ইউজার পাসওয়ার্ড বাইপাস
-                        global_pass = USERS_DB.get("__config__", {}).get("bypass_password")
-                        if global_pass and msg_text == global_pass:
-                            _, _, _, current_day = get_user_task_info(chat_id)
-                            if "unlocked_days" not in USERS_DB[chat_id]:
-                                USERS_DB[chat_id]["unlocked_days"] = []
-                            if str(current_day) not in USERS_DB[chat_id]["unlocked_days"]:
-                                USERS_DB[chat_id]["unlocked_days"].append(str(current_day))
-                                save_db(USERS_DB)
-                            send_telegram_msg(chat_id, "✅ <b>𝐏𝐀𝐒𝐒𝐖𝐎𝐑𝐃 𝐀𝐂𝐂𝐄𝐏𝐓𝐄𝐃!</b>\nআপনি আজকের জন্য রেফারাল ছাড়াই ভিআইপি বট আনলক করেছেন।")
-                            send_main_menu(chat_id)
-                            continue
-
-                        # রেফারাল ট্র্যাকিং (/start 12345)
-                        if msg_text.startswith("/start ") and len(msg_text.split()) > 1:
-                            referrer_id = msg_text.split()[1].strip()
-                            if chat_id not in USERS_DB:
-                                get_user_task_info(chat_id)
-                                if referrer_id in USERS_DB and referrer_id != chat_id:
-                                    if "referrals" not in USERS_DB[referrer_id]:
-                                        USERS_DB[referrer_id]["referrals"] = []
-                                    if chat_id not in USERS_DB[referrer_id]["referrals"]:
-                                        USERS_DB[referrer_id]["referrals"].append(chat_id)
-                                        save_db(USERS_DB)
-
-                        # ইউজার মেনু ডেলিভারি
-                        is_member = check_channel_member(chat_id)
-                        target, current_refs, is_unlocked, _ = get_user_task_info(chat_id)
-                        if is_unlocked and is_member:
-                            send_main_menu(chat_id)
-                        else:
-                            send_welcome_task_menu(chat_id)
-
-                    elif "callback_query" in item:
-                        cb = item["callback_query"]
-                        cb_id = cb["id"]
-                        data = cb.get("data", "")
-                        chat_id = str(cb["message"]["chat"]["id"])
-                        msg_id = cb["message"]["message_id"]
-
-                        if data == "verify_task":
-                            is_member = check_channel_member(chat_id)
-                            target, _, is_unlocked, current_day = get_user_task_info(chat_id)
-                            if not is_member:
-                                answer_callback(cb_id, "Access Denied: You must join the channel first.", show_alert=True)
-                            else:
-                                raw_referrals = USERS_DB[chat_id].get("referrals", [])
-                                valid_referrals = 0
-                                fake_referrals = 0
-                                for ref_id in raw_referrals:
-                                    if check_channel_member(ref_id):
-                                        valid_referrals += 1
-                                    else:
-                                        fake_referrals += 1
-
-                                if valid_referrals < target:
-                                    rem = target - valid_referrals
-                                    alert_text = f"Access Denied: {rem} more REAL users must JOIN the channel."
-                                    if fake_referrals > 0:
-                                        alert_text += f"\n\n⚠️ Detected {fake_referrals} fake referrals!"
-                                    answer_callback(cb_id, alert_text, show_alert=True)
-                                    send_welcome_task_menu(chat_id, msg_id)
-                                else:
-                                    if not is_unlocked:
-                                        if "unlocked_days" not in USERS_DB[chat_id]:
-                                            USERS_DB[chat_id]["unlocked_days"] = []
-                                        USERS_DB[chat_id]["unlocked_days"].append(str(current_day))
-                                        save_db(USERS_DB)
-                                    answer_callback(cb_id, "Access Granted. Real Referrals Verified! ✅", show_alert=False)
-                                    send_main_menu(chat_id, msg_id)
-
-                        elif data.startswith("open_"):
-                            selected_slug = data.replace("open_", "")
-                            switch_view(chat_id, msg_id, "market", selected_slug)
-                            answer_callback(cb_id)
-
-                        elif data == "back_to_menu":
-                            switch_view(chat_id, msg_id, "menu", None)
-                            answer_callback(cb_id)
-
-                        else:
-                            answer_callback(cb_id)
+                    # নন-ব্লকিং মাল্টিথ্রেডিংয়ে মেসেজ প্রসেস করা (Instant response)
+                    threading.Thread(target=process_single_update, args=(item,), daemon=True).start()
             else:
-                print(f"[-] getUpdates Error: {res.get('description')}")
+                print(f"[-] getUpdates Error: {res}")
+        except:
+            pass
 
-        except Exception as e:
-            print(f"[-] Telegram Listener Error: {e}")
-
-        time.sleep(0.5)
+        time.sleep(0.2)
 
 # ================= এন্ট্রি পয়েন্ট =================
 if __name__ == "__main__":
