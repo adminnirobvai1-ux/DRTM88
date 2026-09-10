@@ -71,13 +71,13 @@ ALL_TRADERS = [
 USER_SESSIONS = {}
 LAST_UPDATE_ID = 0
 
-# সিগন্যাল গ্লোবাল স্টেট
+# সিগন্যাল কন্ট্রোল স্টেট
 IS_ACTIVE = False
 STOP_PENDING = False
 LAST_WAS_WIN = True
 LAST_MORNING_STICKER_DATE = None
 SCHEDULES = [(14, 0, 15, 0), (17, 0, 18, 0)]
-CURRENT_TRADER_INDEX = 0  # ০ = টপ ১ নম্বর ট্রেডার, লস হলে ১ ধাপ বাড়বে
+CURRENT_TRADER_INDEX = 0  # ০ = টপ ১ নম্বর ট্রেডার, লস হলে বাড়বে
 
 # ================= ফন্ট ও কালার হেল্পার =================
 def to_premium(text):
@@ -231,10 +231,6 @@ def get_timer_display():
 
 # ================= 🧠 হিউম্যান ব্রেন লাইভ সিলেকশন =================
 def get_current_active_trader_data(rank_offset=0):
-    """
-    লিডারবোর্ডের টপ ট্রেডারদের তালিকা তৈরি করে rank_offset অনুযায়ী
-    সঠিক ট্রেডারের (যেমন: উইনে ১ নম্বর, ১ম লসে ২ নম্বর) লাইভ ডেটা আনবে।
-    """
     lb = fetch_leaderboard()
     top_traders = lb.get("top_3_traders", [])
     
@@ -255,7 +251,6 @@ def get_current_active_trader_data(rank_offset=0):
     target_slug = ordered_slugs[rank_offset % len(ordered_slugs)]
     t_data = fetch_trader_data(target_slug)
 
-    # যদি কোনো কারণে ওই ট্রেডারের ডেটা খালি থাকে
     if not t_data or not t_data.get("period"):
         for alt in ordered_slugs:
             t_data = fetch_trader_data(alt)
@@ -286,7 +281,6 @@ def send_prediction_signal(period, prediction, pred_num):
     else:
         digits = "/".join(random.sample(digits_pool, 2))
 
-    # ট্রেডারের নাম ছাড়া সরাসরি সিগন্যাল ফরম্যাট
     text = f"""🌿🍁🌿 {prediction} SIGNAL 🌿🍁🌿
 ▱▱▱▱▱▱▱▱▱▱▱▱▱▱
 💎 Period   ➤  {short_period}
@@ -295,7 +289,7 @@ def send_prediction_signal(period, prediction, pred_num):
 ⚡ Digits   ➤  {digits}
 ▱▱▱▱▱▱▱▱▱▱▱▱▱▱"""
     send_telegram_msg(CHAT_ID, text)
-    print(f"[+] [SIGNAL SENT TO CHANNEL] Period: {short_period} | Action: {prediction} | Num: {pred_num}")
+    print(f"[+] [SIGNAL SENT] Period: {short_period} | Action: {prediction} | Num: {pred_num}")
 
 # ================= সেশন কন্ট্রোল লজিক =================
 def start_signal_session(manual=False):
@@ -335,12 +329,10 @@ def execute_session_close():
     print("[-] Session Closed Safely on WIN.")
 
 def is_in_schedule(now):
-    """১২-ঘণ্টা ও ২৪-ঘণ্টা উভয় ফরম্যাটেই নির্ভুল শিডিউল যাচাই"""
     c24 = now.hour * 60 + now.minute
     c12 = (now.hour % 12) * 60 + now.minute
 
     for (sh, sm, eh, em) in SCHEDULES:
-        # ২৪ ঘণ্টা চেক
         s24 = sh * 60 + sm
         e24 = eh * 60 + em
         if s24 <= e24:
@@ -348,7 +340,6 @@ def is_in_schedule(now):
         else:
             if c24 >= s24 or c24 < e24: return True
 
-        # ১২ ঘণ্টা চেক (ভুলে AM এর জায়গায় PM লিখলেও যেন স্টার্ট হয়)
         s12 = (sh % 12) * 60 + sm
         e12 = (eh % 12) * 60 + em
         if s12 <= e12:
@@ -358,7 +349,7 @@ def is_in_schedule(now):
 
     return False
 
-# ================= ⚡ চ্যানেলের অটো সিগন্যাল ইঞ্জিন =================
+# ================= ⚡ চ্যানেলের অটো সিগন্যাল ও রিয়েল উইন/লস ডিটেকশন =================
 def channel_signal_engine():
     global IS_ACTIVE, STOP_PENDING, LAST_WAS_WIN, LAST_MORNING_STICKER_DATE, CURRENT_TRADER_INDEX
     
@@ -371,13 +362,11 @@ def channel_signal_engine():
         try:
             now = datetime.now(BD_TIMEZONE)
 
-            # সকাল ৫ টায় স্টিকার
             if now.hour == 5 and now.minute == 0:
                 if LAST_MORNING_STICKER_DATE != now.date():
                     send_telegram_sticker(CHAT_ID, MORNING_STICKER)
                     LAST_MORNING_STICKER_DATE = now.date()
 
-            # শিডিউল যাচাই
             if is_in_schedule(now):
                 if not IS_ACTIVE and not STOP_PENDING:
                     start_signal_session(manual=False)
@@ -385,40 +374,61 @@ def channel_signal_engine():
                 if IS_ACTIVE and not STOP_PENDING:
                     trigger_stop_signal_session()
 
-            # টপ ট্রেডার থেকে সরাসরি লাইভ ডেটা আনা
+            # অ্যাক্টিভ ট্রেডারের ডেটা সংগ্রহ
             t_data = get_current_active_trader_data(CURRENT_TRADER_INDEX)
             if t_data:
-                curr_period = str(t_data.get("period", ""))
+                curr_period = str(t_data.get("period", "")).strip()
                 main_pred = t_data.get("main_prediction", {})
                 pred_action = str(main_pred.get("prediction", "")).strip().upper()
                 pred_num = main_pred.get("predicted_number", None)
                 history = t_data.get("history", [])
 
-                # ১. আগের রাউন্ডের ফলাফল চেক (উইন/লস যাচাই)
+                # ১. রিয়েল-টাইম উইন/লস স্বাধীন ভেরিফিকেশন (Mathematical Calculation)
                 if target_prediction_info and history:
-                    last_done = history[0]
-                    last_done_period = str(last_done.get("period", ""))
-                    last_result = str(last_done.get("result", "")).strip().upper()
+                    target_p = str(target_prediction_info["period"]).strip()
                     
-                    # যদি আমাদের প্রেডিক্ট করা পিরিয়ডের ফলাফল এসে থাকে
-                    if str(target_prediction_info["period"])[-4:] in last_done_period or int(curr_period[-4:]) > int(str(target_prediction_info["period"])[-4:]):
-                        if last_result == "WIN":
-                            send_telegram_sticker(CHAT_ID, random.choice(WIN_STICKERS))
-                            LAST_WAS_WIN = True
-                            CURRENT_TRADER_INDEX = 0  # উইন হলে পুনরায় শীর্ষ ১ নম্বরে রিসেট
-                            print(f"[+] [WIN STICKER SENT] Period {target_prediction_info['period']}")
-                            if STOP_PENDING:
-                                execute_session_close()
-                        elif last_result == "LOSS":
-                            send_telegram_sticker(CHAT_ID, LOSS_STICKER)
-                            LAST_WAS_WIN = False
-                            CURRENT_TRADER_INDEX += 1  # লস হলে পেছনের ২য় ট্রেডারে সুইচ
-                            print(f"[-] [LOSS STICKER SENT] Switching to Next Trader Rank: {CURRENT_TRADER_INDEX}")
+                    # হিস্ট্রি থেকে ঠিক আমাদের প্রেডিক্ট করা পিরিয়ডটি খুঁজে বের করা
+                    matched_item = None
+                    for item in history:
+                        h_p = str(item.get("period", "")).strip()
+                        # শেষ ৫ ডিজিট বা সম্পূর্ণ পিরিয়ড দিয়ে হুবহু মিল খোঁজা
+                        if h_p == target_p or (len(target_p) >= 5 and h_p.endswith(target_p[-5:])) or (len(h_p) >= 5 and target_p.endswith(h_p[-5:])):
+                            matched_item = item
+                            break
+                    
+                    # যদি নির্দিষ্ট পিরিয়ডটি হিস্ট্রিতে এসে থাকে এবং ড্র নম্বর পাওয়া যায়
+                    if matched_item:
+                        actual_num_raw = matched_item.get("actual_number")
+                        if actual_num_raw is not None and str(actual_num_raw).strip() not in ["", "-", "None"]:
+                            try:
+                                actual_num = int(actual_num_raw)
+                                # ০-৪ হলে SMALL, ৫-৯ হলে BIG (স্বাধীন গাণিতিক সত্য)
+                                actual_outcome = "BIG" if actual_num >= 5 else "SMALL"
+                                
+                                predicted_action = target_prediction_info["action"]
+                                
+                                # প্রেডিকশন এবং ড্র হওয়া ফলাফল মিলিয়ে দেখা
+                                if predicted_action == actual_outcome:
+                                    # ✅ প্রকৃত উইন
+                                    send_telegram_sticker(CHAT_ID, random.choice(WIN_STICKERS))
+                                    LAST_WAS_WIN = True
+                                    CURRENT_TRADER_INDEX = 0  # উইন হলে পুনরায় শীর্ষ ১ নম্বরে রিসেট
+                                    print(f"[+] [REAL WIN] Period: {target_p} | Pred: {predicted_action} | Actual: {actual_num} ({actual_outcome})")
+                                    if STOP_PENDING:
+                                        execute_session_close()
+                                else:
+                                    # ❌ প্রকৃত লস
+                                    send_telegram_sticker(CHAT_ID, LOSS_STICKER)
+                                    LAST_WAS_WIN = False
+                                    CURRENT_TRADER_INDEX += 1  # লস হলে পেছনের ২য় সেরা ট্রেডারে সুইচ
+                                    print(f"[-] [REAL LOSS] Period: {target_p} | Pred: {predicted_action} | Actual: {actual_num} ({actual_outcome}) -> Next Trader Rank #{CURRENT_TRADER_INDEX}")
 
-                        target_prediction_info = None
+                                target_prediction_info = None  # এই রাউন্ডের রেজাল্ট কমপ্লিট
+                            except ValueError:
+                                pass
 
-                # ২. নতুন সিগন্যাল চ্যানেলে পাঠানো
-                if IS_ACTIVE and curr_period and curr_period != last_processed_period:
+                # ২. নতুন সিগন্যাল চ্যানেলে পাঠানো (রেজাল্ট শেষ হলে বা নতুন রাউন্ড শুরু হলে)
+                if IS_ACTIVE and curr_period and curr_period != last_processed_period and target_prediction_info is None:
                     if pred_action in ["BIG", "SMALL"]:
                         send_prediction_signal(curr_period, pred_action, pred_num)
                         target_prediction_info = {
@@ -624,7 +634,6 @@ def process_single_update(item):
                     send_telegram_msg(CHAT_ID, txt)
                     send_telegram_msg(chat_id, "✅ শিডিউল আপডেট সফল হয়েছে।")
                     
-                    # যদি বর্তমান সময় এই রেঞ্জের মধ্যে থাকে, সাথে সাথে স্টার্ট
                     now = datetime.now(BD_TIMEZONE)
                     if is_in_schedule(now):
                         start_signal_session(manual=True)
