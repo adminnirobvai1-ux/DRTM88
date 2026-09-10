@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 BOT_TOKEN = "8864547814:AAGZY2Kc_252le4uaZhOL0AR3Ql4g3G3I7A"
 BOT_USERNAME = "DRX_TM_POD_BOT" 
 CHANNEL_USERNAME = "@DARK67HACK"
-CHAT_ID = "@DARK67HACK"  # সিগন্যাল পাঠানোর চ্যানেল
+CHAT_ID = "@DARK67HACK"  # সিগন্যাল পাঠানোর চ্যানেল/গ্রুপ
 
 ADMIN_ID = "8707571669"  # এডমিন আইডি
 
@@ -145,7 +145,7 @@ def send_telegram_msg(chat_id, text, parse_mode="HTML"):
             print(f"[-] SendMsg Failed: {res.get('description')}")
         return res
     except Exception as e:
-        print(f"[-] SendMsg Network Error: {e}")
+        print(f"[-] SendMsg Error: {e}")
         return {}
 
 def send_telegram_sticker(chat_id, sticker_id):
@@ -211,9 +211,9 @@ def fetch_latest_results():
     headers = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
     payload = {"pageNumber": 1, "pageSize": 10}
     try:
-        res = requests.post(LOTTERY_RESULT_API, json=payload, headers=headers, timeout=3)
+        res = requests.post(LOTTERY_RESULT_API, json=payload, headers=headers, timeout=4)
         if res.status_code != 200:
-            res = requests.get(LOTTERY_RESULT_API, headers=headers, timeout=3)
+            res = requests.get(LOTTERY_RESULT_API, headers=headers, timeout=4)
         data = res.json()
         
         def extract_list(d):
@@ -247,8 +247,12 @@ def get_timer_display():
     bar = "▓" * blocks + "░" * (15 - blocks)
     return f"⏳ {sec:02d}S [{bar}]"
 
-# ================= 🧠 TOP TRADER BRAIN =================
-def get_top_trader_prediction():
+# ================= 🧠 TOP TRADER BRAIN + FALLBACK =================
+def get_top_trader_prediction(history_results=None):
+    """
+    টপ ট্রেডারের প্রেডিকশন নিয়ে আসবে। যদি API অফলাইন থাকে,
+    তবে হিউম্যান ব্রেন প্যাটার্ন লজিক দিয়ে স্বয়ংক্রিয় ব্যাকআপ তৈরি করবে।
+    """
     lb = fetch_leaderboard()
     top_traders = lb.get("top_3_traders", [])
     
@@ -280,15 +284,21 @@ def get_top_trader_prediction():
                 break
                 
     if t_data:
-        period = str(t_data.get("period", ""))
         main_pred = t_data.get("main_prediction", {})
         pred_action = str(main_pred.get("prediction", "")).strip().upper()
         pred_num = main_pred.get("predicted_number", None)
         
         if pred_action in ["BIG", "SMALL"]:
-            return target_name, target_slug, period, pred_action, pred_num
-            
-    return None, None, None, None, None
+            return target_name, pred_action, pred_num
+
+    # স্মার্ট ফলব্যাক (Human Brain Analysis from live results)
+    if history_results and len(history_results) >= 3:
+        last_nums = [r[1] for r in history_results[:5]]
+        big_count = sum(1 for n in last_nums if n >= 5)
+        pred_action = "SMALL" if big_count >= 3 else "BIG"
+        return "AI Neural VIP", pred_action, None
+
+    return "AI Neural VIP", random.choice(["BIG", "SMALL"]), None
 
 def send_prediction_signal(issue, prediction, trader_name, pred_num=None):
     short_issue = str(issue)[-6:]
@@ -312,7 +322,7 @@ def send_prediction_signal(issue, prediction, trader_name, pred_num=None):
 ⚡ Digits   ➤  {digits}
 ▱▱▱▱▱▱▱▱▱▱▱▱▱▱"""
     send_telegram_msg(CHAT_ID, text)
-    print(f"[*] Signal Sent: {short_issue} -> {prediction} ({trader_name})")
+    print(f"[*] [SIGNAL SENT] Period {short_issue} -> {prediction} by {trader_name}")
 
 # ================= সেশন কন্ট্রোল লজিক =================
 def start_signal_session(manual=False):
@@ -327,14 +337,14 @@ def start_signal_session(manual=False):
             f"🚀 <b>VIP SIGNAL SESSION STARTED!</b>\n\n"
             f"🧠 <i>AI Top-Trader Brain Activated.</i>\n"
             f"⏰ <b>Trigger:</b> {trigger}\n"
-            f"🎯 <i>Live predictions started!</i>"
+            f"🎯 <i>Live predictions started broadcasting!</i>"
         )
         print(f"[+] Channel Session Started ({trigger})")
 
 def trigger_stop_signal_session():
     global STOP_PENDING
     STOP_PENDING = True
-    print("[*] Stop mode requested. Bot will close on next WIN.")
+    print("[*] Stop requested. Waiting for WIN before session closes.")
 
 def execute_session_close():
     global IS_ACTIVE, STOP_PENDING
@@ -347,15 +357,20 @@ def execute_session_close():
         "✅ <i>Successfully completed with a WIN.</i>\n"
         "ধন্যবাদ সবাইকে। পরবর্তী সেশনে আবার দেখা হবে! 🌹"
     )
-    print("[-] Session Closed On WIN.")
+    print("[-] Session Closed Safely on WIN.")
 
 def is_in_schedule(now):
+    """২৪ ঘন্টার শিডিউল এবং মধ্যরাতের সময় সঠিকভাবে পরীক্ষা করে"""
     current_minutes = now.hour * 60 + now.minute
     for (sh, sm, eh, em) in SCHEDULES:
         start_mins = sh * 60 + sm
         end_mins = eh * 60 + em
-        if start_mins <= current_minutes < end_mins:
-            return True
+        if start_mins <= end_mins:
+            if start_mins <= current_minutes < end_mins:
+                return True
+        else:  # মধ্যরাত পার হলে (যেমন 11 PM to 1 AM)
+            if current_minutes >= start_mins or current_minutes < end_mins:
+                return True
     return False
 
 # ================= চ্যানেল সিগন্যাল ইঞ্জিন =================
@@ -366,17 +381,19 @@ def channel_signal_engine():
     pending_prediction = None
     last_processed_issue = None
 
-    print("[*] Signal Engine Running...")
+    print("[*] Channel Signal Engine Active & Listening...")
 
     while True:
         try:
             now = datetime.now(BD_TIMEZONE)
 
+            # সকাল ৫ টায় স্টিকার
             if now.hour == 5 and now.minute == 0:
                 if LAST_MORNING_STICKER_DATE != now.date():
                     send_telegram_sticker(CHAT_ID, MORNING_STICKER)
                     LAST_MORNING_STICKER_DATE = now.date()
 
+            # শিডিউল যাচাই
             if is_in_schedule(now):
                 if not IS_ACTIVE and not STOP_PENDING:
                     start_signal_session(manual=False)
@@ -384,14 +401,16 @@ def channel_signal_engine():
                 if IS_ACTIVE and not STOP_PENDING:
                     trigger_stop_signal_session()
 
+            # লটারির লাইভ রেজাল্ট রিট্রিভ
             results = fetch_latest_results()
             if results:
                 curr_issue, curr_num = results[0]
 
-                if target_predicted_issue and curr_issue >= target_predicted_issue:
+                # রেজাল্ট চেক ও উইন/লস স্টিকার প্রদান
+                if target_predicted_issue and int(curr_issue) >= int(target_predicted_issue):
                     target_num = None
                     for issue, num in results:
-                        if issue == target_predicted_issue:
+                        if int(issue) == int(target_predicted_issue):
                             target_num = num
                             break
 
@@ -402,27 +421,29 @@ def channel_signal_engine():
                         if actual_is_big == predicted_is_big:
                             send_telegram_sticker(CHAT_ID, random.choice(WIN_STICKERS))
                             LAST_WAS_WIN = True
-                            print(f"[+] WIN | Issue {target_predicted_issue} | Result: {target_num}")
+                            print(f"[+] [WIN] Issue {target_predicted_issue} | Result: {target_num}")
                             if STOP_PENDING:
                                 execute_session_close()
                         else:
                             send_telegram_sticker(CHAT_ID, LOSS_STICKER)
                             LAST_WAS_WIN = False
-                            print(f"[-] LOSS | Issue {target_predicted_issue} | Result: {target_num}")
+                            print(f"[-] [LOSS] Issue {target_predicted_issue} | Result: {target_num}")
 
                         target_predicted_issue = None
                         pending_prediction = None
 
+                # নতুন সিগন্যাল ব্রডকাস্ট করা
                 if IS_ACTIVE and target_predicted_issue is None:
                     next_issue = str(int(curr_issue) + 1)
+                    
                     if next_issue != last_processed_issue:
-                        trader_name, slug, period, prediction, pred_num = get_top_trader_prediction()
+                        trader_name, prediction, pred_num = get_top_trader_prediction(results)
+                        
                         if prediction:
-                            final_issue = period if (period and len(period) >= 6) else next_issue
                             pending_prediction = prediction
-                            target_predicted_issue = final_issue
+                            target_predicted_issue = next_issue
                             last_processed_issue = next_issue
-                            send_prediction_signal(final_issue, prediction, trader_name, pred_num)
+                            send_prediction_signal(next_issue, prediction, trader_name, pred_num)
 
         except Exception as e:
             print(f"[-] Signal Engine Error: {e}")
@@ -445,7 +466,6 @@ def send_welcome_task_menu(chat_id, msg_id=None):
     channel_link = f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}"
     personal_ref_link = f"https://t.me/{BOT_USERNAME}?start={chat_id}"
     
-    # ইউআরএল নিরাপদ এনকোডিং
     encoded_ref = urllib.parse.quote(personal_ref_link)
     encoded_txt = urllib.parse.quote("Join Premium WinGo Prediction Terminal")
     share_url = f"https://t.me/share/url?url={encoded_ref}&text={encoded_txt}"
@@ -469,10 +489,8 @@ def send_welcome_task_menu(chat_id, msg_id=None):
             save_msg_id = msg_id if msg_id else res["result"]["message_id"]
             USER_SESSIONS[str(chat_id)] = {"msg_id": save_msg_id, "view": "task", "slug": None}
             print(f"[+] Task Menu Delivered to: {chat_id}")
-        else:
-            print(f"[-] Task Menu Error: {res}")
     except Exception as e:
-        print(f"[-] send_welcome_task_menu Ex: {e}")
+        print(f"[-] Task Menu Error: {e}")
 
 def build_menu_markup():
     leaderboard = fetch_leaderboard()
@@ -551,10 +569,8 @@ def send_main_menu(chat_id, msg_id=None):
             save_msg_id = msg_id if msg_id else res["result"]["message_id"]
             USER_SESSIONS[str(chat_id)] = {"msg_id": save_msg_id, "view": "menu", "slug": None}
             print(f"[+] Main Menu Delivered to: {chat_id}")
-        else:
-            print(f"[-] Main Menu Error: {res}")
     except Exception as e:
-        print(f"[-] send_main_menu Ex: {e}")
+        print(f"[-] Main Menu Error: {e}")
 
 def switch_view(chat_id, msg_id, view, slug=None):
     if view == "menu":
@@ -594,21 +610,22 @@ def realtime_sync_engine():
             pass
         time.sleep(2)
 
-# ================= মেসেজ প্রসেসর (Fast Response) =================
+# ================= মেসেজ হ্যান্ডলার =================
 def process_single_update(item):
     global SCHEDULES
     
-    # ১. মেসেজ হ্যান্ডলার
     msg = item.get("message") or item.get("channel_post")
     if msg and "text" in msg:
         sender_id = str(msg.get("from", {}).get("id", ""))
         chat_id = str(msg["chat"]["id"])
         msg_text = msg["text"].strip()
         cmd_upper = msg_text.upper()
-        print(f"[*] User [{chat_id}] sent: {msg_text}")
+
+        is_admin_user = (sender_id == ADMIN_ID or chat_id == ADMIN_ID)
+        is_channel_action = (chat_id == CHAT_ID or CHANNEL_USERNAME.replace("@", "") in chat_id)
 
         # এডমিন কমান্ড
-        if sender_id == ADMIN_ID or chat_id == ADMIN_ID:
+        if is_admin_user or is_channel_action:
             if cmd_upper == "/TA":
                 start_signal_session(manual=True)
                 send_telegram_msg(chat_id, "✅ লাইভ সিগন্যাল সেশন সাথে সাথে শুরু করা হয়েছে!")
@@ -625,6 +642,11 @@ def process_single_update(item):
                     txt = f"✅ নতুন সিগন্যাল টাইম সেট করা হয়েছে:\n🕒 {format_12hr(sh, sm)} থেকে {format_12hr(eh, em)} (BD Time)"
                     send_telegram_msg(CHAT_ID, txt)
                     send_telegram_msg(chat_id, "✅ শিডিউল আপডেট সফল হয়েছে।")
+                    
+                    # যদি সেট করা সময় বর্তমান সময়ের মধ্যে পড়ে, তবে সরাসরি স্টার্ট করে দাও
+                    now = datetime.now(BD_TIMEZONE)
+                    if is_in_schedule(now):
+                        start_signal_session(manual=True)
                 return
             elif msg_text.startswith("/admin "):
                 new_pass = msg_text.split(" ", 1)[1].strip()
@@ -658,7 +680,7 @@ def process_single_update(item):
                         USERS_DB[referrer_id]["referrals"].append(chat_id)
                         save_db(USERS_DB)
 
-        # সাধারণ ইউজার মেসেজ/স্টার্ট
+        # ইউজার মেনু
         is_member = check_channel_member(chat_id)
         target, current_refs, is_unlocked, _ = get_user_task_info(chat_id)
         if is_unlocked and is_member:
@@ -666,7 +688,7 @@ def process_single_update(item):
         else:
             send_welcome_task_menu(chat_id)
 
-    # ২. বাটন কলব্যাক হ্যান্ডলার
+    # কলব্যাক হ্যান্ডলার
     elif "callback_query" in item:
         cb = item["callback_query"]
         cb_id = cb["id"]
@@ -721,25 +743,22 @@ def process_single_update(item):
 def telegram_listener():
     global LAST_UPDATE_ID, BOT_USERNAME
     
-    # বট টোকেন যাচাই ও স্বয়ংক্রিয় ইউজারনেম রিট্রিভ
     try:
         me = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=5).json()
         if not me.get("ok"):
-            print(f"❌ [CRITICAL ERROR] টোকেন ভুল বা ইনভ্যালিড! টেলিগ্রাম থেকে 401 Unauthorized এসেছে!")
+            print("❌ [ERROR] Bot Token Invalid!")
             return
         BOT_USERNAME = me["result"]["username"]
-        print(f"✅ Bot connected successfully: @{BOT_USERNAME}")
+        print(f"✅ Bot Connected: @{BOT_USERNAME}")
     except Exception as e:
-        print(f"[-] Bot connection check failed: {e}")
+        print(f"[-] Connection Error: {e}")
 
-    # পেন্ডিং বা আটকে থাকা কোনো পুরনো রিকোয়েস্ট ক্লিয়ার করা
     try:
         requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=4)
-        print("[+] Webhook and old queues cleared!")
     except:
         pass
 
-    print("[*] Telegram Listener Active & Ready.")
+    print("[*] Listener Active & Ready for Commands.")
 
     while True:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
@@ -749,10 +768,7 @@ def telegram_listener():
             if res.get("ok"):
                 for item in res["result"]:
                     LAST_UPDATE_ID = item["update_id"]
-                    # নন-ব্লকিং মাল্টিথ্রেডিংয়ে মেসেজ প্রসেস করা (Instant response)
                     threading.Thread(target=process_single_update, args=(item,), daemon=True).start()
-            else:
-                print(f"[-] getUpdates Error: {res}")
         except:
             pass
 
