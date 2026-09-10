@@ -10,7 +10,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 # ================= কনফিগারেশন =================
-BOT_TOKEN = "8864547814:AAFIJt0hTIObBEy16qxGe3y5uPFFy5af3I0"
+BOT_TOKEN = "8864547814:AAEzQCGRyMC1xILxDUlRMqKXQjO6-SVTDRg"
 BOT_USERNAME = "DRX_TM_POD_BOT" 
 CHANNEL_USERNAME = "@DARK67HACK"
 CHAT_ID = "@DARK67HACK"  # সিগন্যাল পাঠানোর চ্যানেল/গ্রুপ
@@ -33,7 +33,7 @@ WIN_STICKERS = [
 LOSS_STICKER = "CAACAgUAAxkBAAICzGpgWC6gUjMbKd5TvjfoCeqHPrrtAAJOGQACxAuZVNxk4HDx8tskPQQ"
 MORNING_STICKER = "CAACAgUAAxkBAAIC0GpgWErTJk46Z_CfSizMZsi2vIU0AAKaFwACE0qZVBcum6ql5maTPQQ"
 
-# ================= গ্লোবাল স্টেট =================
+# ================= ট্রেডার্স লিস্ট =================
 ALL_TRADERS = [
     {"name": "Subs Pro VIP", "slug": "subs"},
     {"name": "Dragon Pro VIP", "slug": "dragon-pro"},
@@ -77,7 +77,7 @@ IS_ACTIVE = False
 STOP_PENDING = False
 LAST_WAS_WIN = True
 LAST_MORNING_STICKER_DATE = None
-SCHEDULES = [(14, 0, 15, 0), (17, 0, 18, 0)]  # ডিফল্ট সময়
+SCHEDULES = [(14, 0, 15, 0), (17, 0, 18, 0)]  # ডিফল্ট শিডিউল
 
 # ================= ফন্ট ও হেল্পার =================
 def to_premium(text):
@@ -140,14 +140,14 @@ USERS_DB = load_db()
 def send_telegram_msg(chat_id, text, parse_mode="HTML"):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     try:
-        return requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, timeout=5).json()
+        return requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, timeout=4).json()
     except:
         return {}
 
 def send_telegram_sticker(chat_id, sticker_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendSticker"
     try:
-        return requests.post(url, json={"chat_id": chat_id, "sticker": sticker_id}, timeout=5).json()
+        return requests.post(url, json={"chat_id": chat_id, "sticker": sticker_id}, timeout=4).json()
     except:
         return {}
 
@@ -207,9 +207,9 @@ def fetch_latest_results():
     headers = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
     payload = {"pageNumber": 1, "pageSize": 10}
     try:
-        res = requests.post(LOTTERY_RESULT_API, json=payload, headers=headers, timeout=4)
+        res = requests.post(LOTTERY_RESULT_API, json=payload, headers=headers, timeout=3)
         if res.status_code != 200:
-            res = requests.get(LOTTERY_RESULT_API, headers=headers, timeout=4)
+            res = requests.get(LOTTERY_RESULT_API, headers=headers, timeout=3)
         data = res.json()
         
         def extract_list(d):
@@ -243,7 +243,208 @@ def get_timer_display():
     bar = "▓" * blocks + "░" * (15 - blocks)
     return f"⏳ {sec:02d}S [{bar}]"
 
-# ================= টার্মিনাল মেনু ও কীবোর্ড =================
+# ================= 🧠 MINI HUMAN BRAIN TOP TRADER SELECTOR =================
+def get_top_trader_prediction():
+    """
+    তাত্ক্ষণিকভাবে লিডারবোর্ডের শীর্ষে (Top #1) থাকা ট্রেডারকে বের করে 
+    তার প্রেডিকশন এবং পিরিয়ড রিটার্ন করে।
+    """
+    lb = fetch_leaderboard()
+    top_traders = lb.get("top_3_traders", [])
+    
+    target_slug = "tiger-pro"
+    target_name = "Tiger Pro VIP"
+    
+    # লিডারবোর্ডের ১ নম্বর ট্রেডারকে বাছাই
+    if top_traders and isinstance(top_traders, list):
+        for candidate in top_traders:
+            c_name = candidate.get("name", "").strip().lower()
+            for t in ALL_TRADERS:
+                if t["name"].strip().lower() == c_name:
+                    target_slug = t["slug"]
+                    target_name = t["name"]
+                    break
+            if target_slug:
+                break
+                
+    # নির্বাচিত শীর্ষ ট্রেডারের লাইভ প্রেডিকশন ডেটা আনা
+    t_data = fetch_trader_data(target_slug)
+    
+    # ব্যাকআপ ট্রেডার চেক
+    if not t_data:
+        for backup_slug in ["tiger-pro", "dragon-pro", "subs"]:
+            t_data = fetch_trader_data(backup_slug)
+            if t_data:
+                target_slug = backup_slug
+                target_name = t_data.get("trader_name", backup_slug.upper())
+                break
+                
+    if t_data:
+        period = str(t_data.get("period", ""))
+        main_pred = t_data.get("main_prediction", {})
+        pred_action = str(main_pred.get("prediction", "")).strip().upper()
+        pred_num = main_pred.get("predicted_number", None)
+        
+        if pred_action in ["BIG", "SMALL"]:
+            return target_name, target_slug, period, pred_action, pred_num
+            
+    return None, None, None, None, None
+
+def send_prediction_signal(issue, prediction, trader_name, pred_num=None):
+    short_issue = str(issue)[-6:]
+    
+    if prediction == "BIG":
+        digits_pool = ['5', '6', '7', '8', '9']
+    else:
+        digits_pool = ['0', '1', '2', '3', '4']
+        
+    if pred_num is not None and str(pred_num) in digits_pool:
+        other_digit = random.choice([d for d in digits_pool if d != str(pred_num)])
+        digits = f"{pred_num}/{other_digit}"
+    else:
+        digits = "/".join(random.sample(digits_pool, 2))
+
+    text = f"""🌿🍁🌿 {prediction} SIGNAL 🌿🍁🌿
+▱▱▱▱▱▱▱▱▱▱▱▱▱▱
+💎 Period   ➤  {short_issue}
+🎯 Action   ➤  BET {prediction} 🌹
+⚡ Trader   ➤  {trader_name} 🧠
+⚡ Digits   ➤  {digits}
+▱▱▱▱▱▱▱▱▱▱▱▱▱▱"""
+    send_telegram_msg(CHAT_ID, text)
+    print(f"[*] [Signal Sent] Issue {short_issue} | Pred: {prediction} | Trader: {trader_name}")
+
+# ================= সেশন কন্ট্রোল লজিক =================
+def start_signal_session(manual=False):
+    global IS_ACTIVE, STOP_PENDING
+    if not IS_ACTIVE:
+        IS_ACTIVE = True
+        STOP_PENDING = False
+        send_telegram_sticker(CHAT_ID, START_STICKER)
+        trigger = "Manual (/TA)" if manual else "Schedule"
+        send_telegram_msg(
+            CHAT_ID, 
+            f"🚀 <b>VIP SIGNAL SESSION STARTED!</b>\n\n"
+            f"🧠 <i>AI Top-Trader Brain Activated.</i>\n"
+            f"⏰ <b>Triggered By:</b> {trigger}\n"
+            f"🎯 <i>Best trader predictions broadcasting live!</i>"
+        )
+        print(f"[+] Channel Session Started via {trigger}")
+
+def trigger_stop_signal_session():
+    global STOP_PENDING
+    STOP_PENDING = True
+    print("[*] Graceful stop requested. Waiting for WIN before closing session...")
+
+def execute_session_close():
+    global IS_ACTIVE, STOP_PENDING
+    IS_ACTIVE = False
+    STOP_PENDING = False
+    send_telegram_sticker(CHAT_ID, START_STICKER)
+    send_telegram_msg(
+        CHAT_ID,
+        "🛑 <b>SESSION CLOSED SAFELY!</b>\n\n"
+        "✅ <i>Successfully finished with a WIN.</i>\n"
+        "ধন্যবাদ সবাইকে আমাদের সাথে থাকার জন্য। পরবর্তী শিডিউলে আবার দেখা হবে! 🌹"
+    )
+    print("[-] Session Closed Safely on WIN.")
+
+def is_in_schedule(now):
+    current_minutes = now.hour * 60 + now.minute
+    for (sh, sm, eh, em) in SCHEDULES:
+        start_mins = sh * 60 + sm
+        end_mins = eh * 60 + em
+        if start_mins <= current_minutes < end_mins:
+            return True
+    return False
+
+# ================= চ্যানেলের লাইভ সিগন্যাল ইঞ্জিন =================
+def channel_signal_engine():
+    global IS_ACTIVE, STOP_PENDING, LAST_WAS_WIN, LAST_MORNING_STICKER_DATE
+    
+    target_predicted_issue = None
+    pending_prediction = None
+    last_processed_issue = None
+
+    print("[*] Channel Signal Engine Running...")
+
+    while True:
+        try:
+            now = datetime.now(BD_TIMEZONE)
+
+            # সকাল ৫ টায় স্টিকার
+            if now.hour == 5 and now.minute == 0:
+                if LAST_MORNING_STICKER_DATE != now.date():
+                    send_telegram_sticker(CHAT_ID, MORNING_STICKER)
+                    LAST_MORNING_STICKER_DATE = now.date()
+
+            # অটো শিডিউল চেক
+            if is_in_schedule(now):
+                if not IS_ACTIVE and not STOP_PENDING:
+                    start_signal_session(manual=False)
+            else:
+                if IS_ACTIVE and not STOP_PENDING:
+                    trigger_stop_signal_session()
+
+            # ফলাফল সংগ্রহ ও রেজাল্ট ভেরিফাই
+            results = fetch_latest_results()
+            if results:
+                curr_issue, curr_num = results[0]
+
+                # পূর্ববর্তী প্রেডিকশন উইন নাকি লস চেক
+                if target_predicted_issue and curr_issue >= target_predicted_issue:
+                    target_num = None
+                    for issue, num in results:
+                        if issue == target_predicted_issue:
+                            target_num = num
+                            break
+
+                    if target_num is not None:
+                        actual_is_big = (target_num >= 5)
+                        predicted_is_big = (pending_prediction == "BIG")
+                        
+                        if actual_is_big == predicted_is_big:
+                            # WIN হলে উইন স্টিকার
+                            send_telegram_sticker(CHAT_ID, random.choice(WIN_STICKERS))
+                            LAST_WAS_WIN = True
+                            print(f"[+] [WIN] Issue {target_predicted_issue} | Res: {target_num} | Pred: {pending_prediction}")
+                            
+                            # যদি অফ করার রিকোয়েস্ট থাকে, তবে উইনের পর নিরাপদভাবে বন্ধ হবে
+                            if STOP_PENDING:
+                                execute_session_close()
+                        else:
+                            # LOSS হলে লস স্টিকার
+                            send_telegram_sticker(CHAT_ID, LOSS_STICKER)
+                            LAST_WAS_WIN = False
+                            print(f"[-] [LOSS] Issue {target_predicted_issue} | Res: {target_num} | Pred: {pending_prediction}")
+
+                        target_predicted_issue = None
+                        pending_prediction = None
+
+                # যদি সেশন একটিভ থাকে, তবে অবিলম্বে শীর্ষ ট্রেডারের প্রেডিকশন নিয়ে সিগন্যাল প্রদান
+                if IS_ACTIVE and target_predicted_issue is None:
+                    next_issue = str(int(curr_issue) + 1)
+                    
+                    if next_issue != last_processed_issue:
+                        trader_name, slug, period, prediction, pred_num = get_top_trader_prediction()
+                        
+                        if prediction:
+                            # ট্রেডারের নিজস্ব পিরিয়ড থাকলে সেটি অথবা লটারির পরবর্তী পিরিয়ড সেট করা
+                            final_issue = period if (period and len(period) >= 6) else next_issue
+                            
+                            pending_prediction = prediction
+                            target_predicted_issue = final_issue
+                            last_processed_issue = next_issue
+                            
+                            # চ্যানেলে সিগন্যাল পাঠানো
+                            send_prediction_signal(final_issue, prediction, trader_name, pred_num)
+
+        except Exception as e:
+            print(f"[-] Signal Engine Loop Error: {e}")
+
+        time.sleep(0.5)
+
+# ================= টার্মিনাল মেনু ও কীবোর্ড ভিউ =================
 def send_welcome_task_menu(chat_id, msg_id=None):
     target, current, _, _ = get_user_task_info(chat_id)
     text = (
@@ -387,159 +588,7 @@ def live_update_keyboard(chat_id, msg_id, view, slug):
     except Exception:
         pass
 
-# ================= 🧠 MINI HUMAN BRAIN ENGINE =================
-def mini_human_brain_select(target_issue_str):
-    """
-    টপ পারফর্মিং ট্রেডারদের এনালাইসিস করে হিউম্যান ইন্টেলিজেন্সের মত
-    সেরা ট্রেডার এবং প্রেডিকশন (BIG/SMALL) নির্বাচন করবে।
-    """
-    leaderboard = fetch_leaderboard()
-    top_traders = leaderboard.get("top_3_traders", [])
-    
-    candidate_slugs = []
-    for t in top_traders:
-        t_name = t.get("name", "").strip().lower()
-        for item in ALL_TRADERS:
-            if item["name"].strip().lower() == t_name:
-                candidate_slugs.append(item["slug"])
-                break
-
-    # ব্যাকআপ হিসেবে জনপ্রিয় কয়েকটি ট্রেডার যুক্ত করা
-    for fallback in ["dragon-pro", "tiger-pro", "phoenix-vip", "lion-heart"]:
-        if fallback not in candidate_slugs:
-            candidate_slugs.append(fallback)
-
-    candidate_slugs = candidate_slugs[:6]
-
-    trader_evaluations = []
-    big_weight = 0
-    small_weight = 0
-
-    for slug in candidate_slugs:
-        t_data = fetch_trader_data(slug)
-        if not t_data: continue
-
-        main_pred = t_data.get("main_prediction", {})
-        pred_action = str(main_pred.get("prediction", "")).strip().upper()
-        if pred_action not in ["BIG", "SMALL"]: continue
-
-        history = t_data.get("history", [])[:6]
-        # স্কোরিং ক্যালকুলেশন: শেষ কয়েকটি রাউন্ডের উইন রেট এবং উইন স্ট্রিক
-        score = 10
-        streak = 0
-        for h in history:
-            res = str(h.get("result", "")).strip().upper()
-            if res == "WIN":
-                score += 5
-                streak += 1
-            else:
-                score -= 3
-                break
-
-        trader_evaluations.append({
-            "name": t_data.get("trader_name", slug.upper()),
-            "slug": slug,
-            "prediction": pred_action,
-            "predicted_number": main_pred.get("predicted_number", None),
-            "score": score,
-            "streak": streak
-        })
-
-        if pred_action == "BIG":
-            big_weight += score
-        else:
-            small_weight += score
-
-    if not trader_evaluations:
-        # কোনো ডেটা না পেলে ডিফল্ট সেফ চয়েস
-        choice = random.choice(["BIG", "SMALL"])
-        return choice, "AI Neural Core", None
-
-    # সর্বোচ্চ স্কোর পাওয়া ট্রেডারকে বাছাই করা
-    trader_evaluations.sort(key=lambda x: x["score"], reverse=True)
-    best_trader = trader_evaluations[0]
-
-    # কনসেনসাস চেক (যদি মেজরিটি একমত হয়)
-    final_pred = "BIG" if big_weight >= small_weight else "SMALL"
-    
-    # যদি বেস্ট ট্রেডারের প্রেডিকশন এবং মেজরিটি একই হয়
-    chosen_name = best_trader["name"]
-    predicted_num = best_trader["predicted_number"]
-
-    return final_pred, chosen_name, predicted_num
-
-def send_prediction_signal(issue, prediction, trader_name, pred_num=None):
-    short_issue = str(issue)[-6:]
-    
-    if prediction == "BIG":
-        digits_pool = ['5', '6', '7', '8', '9']
-    else:
-        digits_pool = ['0', '1', '2', '3', '4']
-        
-    if pred_num is not None and str(pred_num) in digits_pool:
-        other_digit = random.choice([d for d in digits_pool if d != str(pred_num)])
-        digits = f"{pred_num}/{other_digit}"
-    else:
-        digits = "/".join(random.sample(digits_pool, 2))
-
-    text = f"""🌿🍁🌿 {prediction} SIGNAL 🌿🍁🌿
-▱▱▱▱▱▱▱▱▱▱▱▱▱▱
-💎 Period   ➤  {short_issue}
-🎯 Action   ➤  BET {prediction} 🌹
-⚡ Trader   ➤  {trader_name} 🧠
-⚡ Digits   ➤  {digits}
-▱▱▱▱▱▱▱▱▱▱▱▱▱▱"""
-    send_telegram_msg(CHAT_ID, text)
-    print(f"[*] [Signal Sent] Issue {short_issue} | Pred: {prediction} | Trader: {trader_name}")
-
-# ================= সেশন কন্ট্রোল লজিক =================
-def start_signal_session(manual=False):
-    global IS_ACTIVE, STOP_PENDING
-    if not IS_ACTIVE:
-        IS_ACTIVE = True
-        STOP_PENDING = False
-        send_telegram_sticker(CHAT_ID, START_STICKER)
-        trigger = "Manual (/TA)" if manual else "Schedule"
-        send_telegram_msg(
-            CHAT_ID, 
-            f"🚀 <b>VIP SIGNAL SESSION STARTED!</b>\n\n"
-            f"🧠 <i>AI Human-Brain Engine Activated.</i>\n"
-            f"⏰ <b>Triggered By:</b> {trigger}\n"
-            f"🎯 <i>Get ready for high-accuracy predictions!</i>"
-        )
-        print(f"[+] Channel Session Started via {trigger}")
-
-def trigger_stop_signal_session():
-    """সেশন সাথে সাথে বন্ধ না করে সেফলি উইনের পর অফ হওয়ার জন্য মার্ক করে"""
-    global STOP_PENDING
-    STOP_PENDING = True
-    print("[*] Graceful stop requested. Waiting for WIN before closing session...")
-
-def execute_session_close():
-    global IS_ACTIVE, STOP_PENDING
-    IS_ACTIVE = False
-    STOP_PENDING = False
-    send_telegram_sticker(CHAT_ID, START_STICKER) # সেশন শেষ স্টিকার
-    send_telegram_msg(
-        CHAT_ID,
-        "🛑 <b>SESSION CLOSED SAFELY!</b>\n\n"
-        "✅ <i>Successfully finished with a WIN.</i>\n"
-        "ধন্যবাদ সবাইকে আমাদের সাথে থাকার জন্য। পরবর্তী শিডিউলে আবার দেখা হবে! 🌹"
-    )
-    print("[-] Session Closed Safely on WIN.")
-
-def is_in_schedule(now):
-    current_minutes = now.hour * 60 + now.minute
-    for (sh, sm, eh, em) in SCHEDULES:
-        start_mins = sh * 60 + sm
-        end_mins = eh * 60 + em
-        if start_mins <= current_minutes < end_mins:
-            return True
-    return False
-
-# ================= ব্যাকগ্রাউন্ড থ্রেডসমূহ =================
 def realtime_sync_engine():
-    """ইউজারদের টার্মিনাল মেনুর লাইভ টাইমার আপডেট করার থ্রেড"""
     while True:
         try:
             for chat_id, session in list(USER_SESSIONS.items()):
@@ -549,91 +598,10 @@ def realtime_sync_engine():
             pass
         time.sleep(1)
 
-def channel_signal_engine():
-    """চ্যানেলে স্বয়ংক্রিয়ভাবে সিগন্যাল মনিটর ও হিউম্যান ব্রেইন প্রসেস করার থ্রেড"""
-    global IS_ACTIVE, STOP_PENDING, LAST_WAS_WIN, LAST_MORNING_STICKER_DATE
-    
-    target_predicted_issue = None
-    pending_prediction = None
-    last_processed_issue = None
-
-    print("[*] Channel Signal Engine Running...")
-
-    while True:
-        try:
-            now = datetime.now(BD_TIMEZONE)
-
-            # সকাল ৫ টায় মর্নিং স্টিকার
-            if now.hour == 5 and now.minute == 0:
-                if LAST_MORNING_STICKER_DATE != now.date():
-                    send_telegram_sticker(CHAT_ID, MORNING_STICKER)
-                    LAST_MORNING_STICKER_DATE = now.date()
-
-            # শিডিউল চেক
-            if is_in_schedule(now):
-                if not IS_ACTIVE and not STOP_PENDING:
-                    start_signal_session(manual=False)
-            else:
-                if IS_ACTIVE and not STOP_PENDING:
-                    trigger_stop_signal_session()
-
-            # লাইভ ফলাফল সংগ্রহ
-            results = fetch_latest_results()
-            if results:
-                curr_issue, curr_num = results[0]
-
-                # পূর্ববর্তী সিগন্যালের রেজাল্ট যাচাই
-                if target_predicted_issue and curr_issue >= target_predicted_issue:
-                    target_num = None
-                    for issue, num in results:
-                        if issue == target_predicted_issue:
-                            target_num = num
-                            break
-
-                    if target_num is not None:
-                        actual_is_big = (target_num >= 5)
-                        predicted_is_big = (pending_prediction == "BIG")
-                        
-                        if actual_is_big == predicted_is_big:
-                            # WIN
-                            send_telegram_sticker(CHAT_ID, random.choice(WIN_STICKERS))
-                            LAST_WAS_WIN = True
-                            print(f"[+] [WIN] Issue {target_predicted_issue} | Res: {target_num} | Pred: {pending_prediction}")
-                            
-                            # যদি স্টপ রিকোয়েস্ট পেন্ডিং থাকে, তবে উইনের পর নিরাপদভাবে বন্ধ হবে
-                            if STOP_PENDING:
-                                execute_session_close()
-                        else:
-                            # LOSS
-                            send_telegram_sticker(CHAT_ID, LOSS_STICKER)
-                            LAST_WAS_WIN = False
-                            print(f"[-] [LOSS] Issue {target_predicted_issue} | Res: {target_num} | Pred: {pending_prediction}")
-
-                        target_predicted_issue = None
-                        pending_prediction = None
-
-                # নতুন প্রেডিকশন পাঠানোর লজিক (সেশন একটিভ থাকলে)
-                if IS_ACTIVE and target_predicted_issue is None:
-                    next_issue = str(int(curr_issue) + 1)
-                    if next_issue != last_processed_issue:
-                        # হিউম্যান ব্রেইন দিয়ে সেরা প্রেডিকশন বের করা
-                        prediction, trader_name, pred_num = mini_human_brain_select(next_issue)
-                        
-                        pending_prediction = prediction
-                        target_predicted_issue = next_issue
-                        last_processed_issue = next_issue
-                        
-                        send_prediction_signal(next_issue, prediction, trader_name, pred_num)
-
-        except Exception as e:
-            print(f"[-] Signal Engine Error: {e}")
-
-        time.sleep(1)
-
 # ================= সেন্ট্রাল টেলিগ্রাম লিসেনার =================
 def telegram_listener():
     global LAST_UPDATE_ID, SCHEDULES
-    print("[*] Telegram Central Listener Active. Ready for Commands.")
+    print("[*] Telegram Listener Active. Ready for Admin Commands.")
 
     while True:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
@@ -644,7 +612,7 @@ def telegram_listener():
                 for item in res["result"]:
                     LAST_UPDATE_ID = item["update_id"]
 
-                    # ১. মেসেজ হ্যান্ডলার (এডমিন কমান্ড + ইউজার মেসেজ)
+                    # ১. মেসেজ হ্যান্ডলার
                     msg = item.get("message") or item.get("channel_post")
                     if msg and "text" in msg:
                         sender_id = str(msg.get("from", {}).get("id", ""))
@@ -652,15 +620,15 @@ def telegram_listener():
                         msg_text = msg["text"].strip()
                         cmd_upper = msg_text.upper()
 
-                        # --- শুধুমাত্র এডমিন কমান্ডসমূহ ---
+                        # এডমিন কন্ট্রোল
                         if sender_id == ADMIN_ID or chat_id == ADMIN_ID:
                             if cmd_upper == "/TA":
                                 start_signal_session(manual=True)
-                                send_telegram_msg(chat_id, "✅ সিগন্যাল সেশন ম্যানুয়ালি স্টার্ট করা হয়েছে!")
+                                send_telegram_msg(chat_id, "✅ লাইভ সিগন্যাল সেশন সাথে সাথে শুরু করা হয়েছে!")
                                 continue
                             elif cmd_upper == "/TOFF":
                                 trigger_stop_signal_session()
-                                send_telegram_msg(chat_id, "⏳ সেশন স্টপ মোডে গেছে। পরবর্তী WIN হওয়ার সাথে সাথে সেশন অফ হয়ে যাবে।")
+                                send_telegram_msg(chat_id, "⏳ সেশন স্টপ মোডে গেছে। পরবর্তী WIN হওয়ার পর নিরাপদভাবে অফ হবে।")
                                 continue
                             elif cmd_upper.startswith("/TM"):
                                 new_sched = parse_time_command(msg_text)
@@ -669,7 +637,7 @@ def telegram_listener():
                                     sh, sm, eh, em = new_sched
                                     txt = f"✅ নতুন সিগন্যাল টাইম সেট করা হয়েছে:\n🕒 {format_12hr(sh, sm)} থেকে {format_12hr(eh, em)} (BD Time)"
                                     send_telegram_msg(CHAT_ID, txt)
-                                    send_telegram_msg(chat_id, f"✅ শিডিউল আপডেট সফল হয়েছে।")
+                                    send_telegram_msg(chat_id, "✅ শিডিউল আপডেট সফল হয়েছে।")
                                 continue
                             elif msg_text.startswith("/admin "):
                                 new_pass = msg_text.split(" ", 1)[1].strip()
@@ -678,7 +646,7 @@ def telegram_listener():
                                 send_telegram_msg(chat_id, f"✅ <b>Bypass password set to:</b> {new_pass}")
                                 continue
 
-                        # --- ইউজার পাসওয়ার্ড বাইপাস ---
+                        # ইউজার পাসওয়ার্ড বাইপাস
                         global_pass = USERS_DB.get("__config__", {}).get("bypass_password")
                         if global_pass and msg_text == global_pass:
                             _, _, _, current_day = get_user_task_info(chat_id)
@@ -691,7 +659,7 @@ def telegram_listener():
                             send_main_menu(chat_id)
                             continue
 
-                        # --- রেফারাল ট্র্যাকিং (/start ...) ---
+                        # রেফারাল ট্র্যাকিং
                         if msg_text.startswith("/start ") and len(msg_text.split()) > 1:
                             referrer_id = msg_text.split()[1].strip()
                             if chat_id not in USERS_DB:
@@ -703,7 +671,7 @@ def telegram_listener():
                                         USERS_DB[referrer_id]["referrals"].append(chat_id)
                                         save_db(USERS_DB)
 
-                        # সাধারণ ইউজার স্টার্ট বা মেসেজ
+                        # ইউজার ভেরিফিকেশন ও মেনু
                         is_member = check_channel_member(chat_id)
                         target, current_refs, is_unlocked, _ = get_user_task_info(chat_id)
                         if is_unlocked and is_member:
@@ -773,7 +741,7 @@ if __name__ == "__main__":
     t_sync = threading.Thread(target=realtime_sync_engine, daemon=True)
     t_sync.start()
 
-    # থ্রেড ২: চ্যানেলের হিউম্যান ব্রেইন সিগন্যাল ইঞ্জিন
+    # থ্রেড ২: চ্যানেলের লাইভ সিগন্যাল ইঞ্জিন
     t_signal = threading.Thread(target=channel_signal_engine, daemon=True)
     t_signal.start()
 
